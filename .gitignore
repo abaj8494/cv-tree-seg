@@ -9,6 +9,7 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+USA_segmentation/
 develop-eggs/
 dist/
 downloads/
