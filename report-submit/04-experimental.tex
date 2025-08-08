@@ -1,0 +1,20 @@
+\newpage
+\section{Experimental Results}
+Included below are all the experimental results proved by this table.
+We report mean Intersection-over-Union (mIoU) on test set.
+Intersection-over-Union refers to the total percent of the true mask and the generated mask that overlap, divided by the size of both masks
+For DeepLabV3+, the data are split \textbf{80/20} into training, validation.
+\begin{table}[h]
+  \centering
+  \begin{large} 
+  \begin{tabular}{|l|r|}
+    \hline
+    \textbf{Model} & \textbf{IoU} \\ \hline
+    UNet           & 0.705  \\ \hline
+    CNN            & 0.2862 \\ \hline
+    DeepLabV3+ (with CBAM) & 0.4000 \\ \hline
+    Random Forest  & 0.1274 \\ \hline
+    SGD            & 0.0640 \\ \hline
+  \end{tabular}
+  \end{large}
+\end{table}

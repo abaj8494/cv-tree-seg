@@ -1,0 +1,197 @@
+\section{Methods}
+\subsection{DeepLabV3\,+CBAM for Fine–Grained Semantic Segmentation}
+\label{sec:seg_deeplab_cbam}
+DeepLabV3+ is a semantic image segmentation model built on top of a standard CNN ``backbone" for feature extraction. Its encoder-decoder structure fuses high-level context with low-level(high resolution) features via skip connections, yielding sharp object boundaries. 
+\paragraph{Motivation.}
+Dead-tree pixels cover $\approx$3\,\% of each radiograph and appear as thin,
+low-contrast structures.  
+We therefore require \emph{(i)} large receptive fields to recognise context
+and \emph{(ii)} high spatial fidelity to preserve edges.  
+DeepLabV3 supplies the former via
+Atrous Spatial Pyramid Pooling (ASPP), while
+CBAM supplies the latter by letting the network
+\textit{focus} on informative channels and regions.
+
+\paragraph{Pre-processing.}
+Images are resized to \(256\times256\), stacked into six channels
+(R, G, B, NIR, G, B), then per-channel $z$-score normalised.
+All images are first resized to \(256 \times 256\) so that the network sees a
+\emph{fixed} spatial grid; this eliminates per-image padding, keeps the
+receptive-field schedule constant, and enables efficient, size-homogeneous
+mini–batching on the GPU.
+Including NIR enriches the spectral signature: vegetation stress and
+water content modulate NIR much more strongly than the visible bands, and
+duplicating \(G,B\) lets early convolutions learn cross-spectral filters
+(e.g.\ “\(\text{NIR}-\text{G}\)” indices) that correlate with
+dead-tissue pixels yet are tricky to hand-engineer.
+Finally, each channel is $z$-score normalised,
+\(x' = (x - \mu) / \sigma\),
+centering the distribution at zero and scaling it to unit variance.
+This removes scale disparities between bands, keeps gradients numerically
+stable, and prevents high-energy channels (typically NIR) from dominating the
+loss.  The combined resizing, stacking, and normalisation pipeline therefore
+standardises the data, maximises useful spectral diversity, and supplies the
+CNN with well-behaved inputs that converge faster and yield sharper,
+more discriminative features.
+
+\paragraph{Encoder with embedded attention.}
+A lightweight \textbf{ResNet-18} backbone produces four feature stages
+\(\{f_1,f_2,f_3,f_4\}\) at strides \(\{4,8,16,32\}\).
+After each residual block we insert a \textbf{CBAM} to refine features.
+
+\paragraph{Attention mechanism.}
+Given \(F\in\mathbb{R}^{C\times H\times W}\), channel and spatial masks are
+computed as
+\begin{align}
+  M_c &= \sigma\!\bigl(
+           W_1\,\mathrm{GAP}(F)+
+           W_2\,\mathrm{GMP}(F)
+         \bigr),\\
+  \hat F &= M_c \odot F,\\
+  M_s &= \sigma\!\Bigl(
+           \mathrm{Conv}_{7\times7}
+           \bigl[\mathrm{GAP}(\hat F);\mathrm{GMP}(\hat F)\bigr]
+         \Bigr),\\
+  F_{\text{CBAM}} &= M_s \odot \hat F,
+\end{align}
+where \(\sigma\) is the sigmoid, \(\odot\) denotes broadcast multiplication,
+and GAP/GMP are global average/max pooling. 
+\emph{Channel attention} amplifies the metal-rich filters;
+\emph{spatial attention} pinpoints their contours.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=.72\linewidth]{figs/cbam_block.png}
+  \caption{CBAM: sequential \emph{channel} (\(M_c\)) and
+           \emph{spatial} (\(M_s\)) attention. Adapted from}
+  \label{fig:cbam}
+\end{figure}
+
+\paragraph{Atrous Spatial Pyramid Pooling.}
+The top feature map \(f_4\) is processed by ASPP branches
+\(\{1\times1, 3\times3_{r=6}, 3\times3_{12}, 3\times3_{18},
+\text{global pool}\}\).
+Concatenation (\(5\times256\) channels) is compressed to 256 channels
+via a \(1\times1\) convolution.
+
+Convolutional layers with a single dilation rate see only one scale of
+context: either fine detail (small rate) or broad structure (large rate).
+
+
+\begin{figure}
+  \centering
+  \includegraphics[width=.9\linewidth]{figs/aspp.png}
+  \caption{Encoder–decoder topology of DeepLabV3\,+. Atrous rates
+           \(\{1,6,12,18\}\) provide multi–scale context; a skip connection
+           injects low-level detail for sharp boundaries.}
+  \label{fig:deeplabv3p}
+\end{figure}
+
+\paragraph{Decoder.}
+The ASPP tensor is $4\times$ bilinearly upsampled and concatenated with
+\(f_1\) (stride-4).  
+A single \(3\times3\) \(\rightarrow\) BN \(\rightarrow\) ReLU layer refines the
+fusion; dropout \(p{=}0.3\) regularises; a \(1\times1\) convolution produces
+per-pixel logits which are finally upsampled to the original resolution.
+
+\paragraph{Loss and optimisation.}
+We minimise a composite loss
+\begin{equation}
+  \mathcal{L} = \alpha\,\mathcal{L}_{\text{BCE}} +
+                \beta\,\mathcal{L}_{\text{Dice}} +
+                \gamma\,\mathcal{L}_{\text{Tversky}},
+  \quad (\alpha,\beta,\gamma)=(0.3,0.3,0.4),
+\end{equation}
+with the Tversky term
+\begin{equation}
+\mathcal{L}_{\text{Tversky}}
+  = 1 - \frac{\!\!\sum_i p_i g_i}
+             {\sum_i p_i g_i
+              + 0.3\sum_i p_i(1-g_i)
+              + 0.7\sum_i (1-p_i)g_i},
+\end{equation}
+balancing precision and recall on minority pixels.  
+Training uses AdamW (lr \(=10^{-3}\), wd \(=10^{-4}\)),
+`ReduceLROnPlateau` (factor 0.5, patience = 5), batch size = 8.
+
+Binary-cross-entropy (BCE) supplies a pixel-wise “log-likelihood’’ signal that stabilises early training: it pushes every pixel toward its correct class regardless of region size and keeps gradients dense, which helps the optimiser escape flat regions of the loss landscape. Dice loss then counters the imbalance directly by maximising the overlap ratio between prediction and ground truth; because it is normalised by the combined foreground areas, a handful of minority pixels can still exert a proportionally large influence, preventing the network from converging to a trivial all-background solution. Finally, the Tversky loss generalises Dice with separate weighting on false positives and false negatives (here we set \begin{math}\alpha = 0.3, \beta = 0.7\end{math}). That asymmetry is crucial for thin, low-contrast structures such as dead-tree branches: it penalises missed foreground (false negatives) more heavily than spurious foreground, nudging the model to “err on the side of inclusion’’ and recover slender details that Dice alone often overlooks. By linearly combining the three terms, we preserve BCE’s stable gradients, Dice’s overlap sensitivity, and Tversky’s controllable precision–recall trade-off, yielding masks that are both globally accurate and faithful to fine structures.
+\subsection{CNN}
+Convolutional neural networks (CNN) are often used to process image problems, such as object detection, object classification and segmentation\cite{b8}. We explored two different models to segment standing dead trees in aerial forest images. The first model used multiple convolutional layers with ReLU activation and batch normalisation. Each layer utilises 3 x 3 kernels with the same padding to maintain the spatial dimensions. Dropout layers are used to prevent overfitting. In the final layer, the sigmoid activation layer is used for binary segmentation output. This model is easier and faster to train and , but it also has limited ability to capture multi-scale spatial data. 
+
+\begin{lstlisting}[language=Python]
+#Model 1
+#Build the simple CNN model without pooling
+def cnn_simple_model(input_shape, filters, conv_layers, dropout):
+    inputs = layers.Input(shape=input_shape)
+    x = inputs
+    for i in range(conv_layers):
+        x = layers.Conv2D(filters[i], (3, 3), activation='relu', padding='same')(x)
+        x = layers.BatchNormalization()(x)
+        if dropout > 0:
+            x = layers.Dropout(dropout)(x)
+    outputs = layers.Conv2D(1, (1, 1), activation='sigmoid')(x)
+    model = models.Model(inputs, outputs)
+    return model
+\end{lstlisting}
+
+For the second model, it uses encoder and decoder to build the model. Encoder path uses max pooling for downsampling, while decoder path applies transposed convolution for upsampling to restore the spatial resolution. Skip connection is used for keeping spatial details, which can improve boundary accuracy. This model can capture more relevant information and finer details from images, while requiring higher computational resources and greater memory consumption for training and testing. 
+
+\begin{lstlisting}[language=Python]
+#Model 2
+#Build the complex CNN model with encoder and decoder
+def cnn_encoder_decoder_model(input_shape, filters, conv_layers, dropout):
+    inputs = layers.Input(shape=input_shape)
+    x = inputs
+    skips = []
+    #encode
+    for i in range(conv_layers):
+        x = layers.Conv2D(filters[i], (3, 3), activation='relu', padding='same')(x)
+        x = layers.BatchNormalization()(x)
+        skips.append(x)
+        x = layers.MaxPooling2D((2, 2))(x)
+        if dropout > 0:
+            x = layers.Dropout(dropout)(x)
+
+    #decode
+    for i in range(conv_layers-1, -1, -1):
+        x = layers.Conv2DTranspose(filters[i], (3, 3), strides=(2, 2), activation='relu', padding='same')(x)
+        if i < len(skips):
+            x = layers.Concatenate()([x, skips[i]])
+        if dropout > 0:
+            x = layers.Dropout(dropout)(x)
+
+    outputs = layers.Conv2D(1, (1, 1), activation='sigmoid')(x)
+    model = models.Model(inputs, outputs)
+    return model
+\end{lstlisting}
+
+\subsection{Random Forests}
+Random Forest methods refer to the use of a machine learning method that works by creating multiple decision trees and aggregating their output to produce a model which can produce a more robust and stable prediction model compared with using singular decision trees that have a tendency to overfit.\\
+\\
+\begin{figure}[bht!]
+    \centering
+    \includegraphics[width=1\linewidth]{figs/random-forest.png}
+    \caption{Random forest classifier}
+    \label{fig:placeholder}
+\end{figure}
+\\
+This method was implemented in two different ways. The first method was to treat each pixel independently of the next, and only consider if the ground truth had a dead tree at that spot. This was implemented because early exploratory data analysis had noticed that dead tree pixels tended to share similar colour features compared with non-dead (regular) tree pixels.  As if the colours of the image provided a good idea if the spot contained a dead tree, it would be best not to provide too much data.\\
+
+The second method was to consider the pixels in relation to their surroundings, as there was a chance that a dead tree would be better identified in relation to their surroundings, and in this case, taking each pixel independently would result in loss of useful data. as such the second method was to use a kernel to feed both the points and its relevant surroundings into the random forest (with the y data simply being 1 if any pixel in the kernel is a mask pixel). Since this might provide a very large data set if a kernel is made for all points, feature detection algorithms can be used to select the points, in this case, SIFT was used, but recommendations have been made for the use of other feature extraction algorithms.
+
+\subsection{Stochastic Gradient Descent}
+Another simple machine learning method that was also explored was the use of stochastic gradient descent (or SGD for short). SGD is a popular machine learning technique that applies the concept of gradient descent to minimise a loss function through iterative optimisation ~\cite{b9}.\\ Compared with traditional gradient descent where the entire training set is used in each iteration which can be very computationally expensive for large datasets ~\cite{b10}, SGD aims to alleviate this issue by choosing random samples (hence the term stochastic) . This also offers the benefit of avoiding local minima that can sometimes occur with regular gradient descent.\\ 
+In the context of this project, the SGD model attempts to classify whether or not a certain vector of pixel values corresponds to a dead tree pixel or a background (non dead-tree) pixel. Similar to the random forest method, each pixel is computed independently of its surrounding neighbours (or its parent image).\\
+\subsection{Support Vector Machines}
+Support Vector Machines (SVM for short) is another popular supervised machine learning algorithm that aims to perform binary classification by attempting to divide a dataset using a hyperplane with a (n-1) hyperplane where n corresponds to the number of features each training sample has.\cite{b11}\\
+Also known as a linear classifier, SVMs work by attempting to find a hyperplane such that the distance between the closest sample of each class is maximised. Although it is a linear classifier, SVMs are capable of performing classification even when a dataset is not linearly separable through a technique known as a kernel method or kernel trick that maps existing data into a higher dimensional space and attempting to find a suitable hyperplane in a higher dimension.~\cite{b12}\\
+\\
+\begin{figure}[ht]
+\includegraphics[width=1\linewidth]{figs/svm-kernel-trick.png}
+\caption{Kernel Trick in SVM to perform linear classification on non-linearly separate data}
+\label{fig:svm}
+\end{figure}
+
+However, a major downside to SVMs is if the dataset is unbalanced or noisy, resulting in classes with overlapping features. This can make it very difficult to separate different classes and if the feature space is not large enough, it may not be possible to converge on a solution as was the case with this task.\\
+
+\input{03.5-aj-unet.tex}

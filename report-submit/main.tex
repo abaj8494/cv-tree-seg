@@ -1,0 +1,102 @@
+\documentclass[conference,dvipsnames]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{svg}
+
+\usepackage{subcaption}   
+
+\hypersetup{
+     colorlinks   = true,
+     linkcolor    = RedViolet,
+     citecolor    = Purple
+}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=1
+}
+
+\lstset{style=mystyle}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Dead Tree Semantic Segmentation\\
+{\huge CS9517: Group Project}
+}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Aayush Bajaj}
+\IEEEauthorblockA{z5362216@ad.unsw.edu.au}
+\and
+
+\IEEEauthorblockN{2\textsuperscript{nd} Kaustubh Illindala}
+\IEEEauthorblockA{z5453032@ad.unsw.edu.au}
+\and
+
+\IEEEauthorblockN{3\textsuperscript{nd} Ming Ong}
+\IEEEauthorblockA{z5619679@ad.unsw.edu.au}
+\and
+
+\IEEEauthorblockN{4\textsuperscript{th} Jingjing Liu}
+\IEEEauthorblockA{z5662212@ad.unsw.edu.au}
+
+\IEEEauthorblockN{5\textsuperscript{th} Matthew Wang}
+\IEEEauthorblockA{z5589818@ad.unsw.edu.au)}
+}
+
+\maketitle
+
+\begin{abstract}
+   Dead tree detection in aerial forest imagery poses significant challenges due to class imbalance (3\% foreground pixels), thin branching structures, and complex spectral signatures. We present a comprehensive evaluation of semantic segmentation approaches, comparing U-Net, CNN variants, DeepLabV3+ with CBAM, and classical machine learning methods (Random Forest, SGD) on a 444-image multi-spectral dataset. Our 8-channel U-Net architecture incorporates RGB, near-infrared (NRG), and computed spectral indices (NDVI, NDWI) with a composite Dice-Focal loss function to address class imbalance. The model achieves IoU = 0.7078 after morphological post-processing, substantially outperforming competing approaches: DeepLabV3+ with CBAM (0.4000), simple CNN (0.2862), Random Forest (0.1274), and SGD (0.0640). Key contributions include domain-specific spectral feature engineering, loss function design for extreme imbalance, and analysis of parameter efficiency across architectures. Results demonstrate that encoder-decoder symmetry with skip connections, despite requiring 31M parameters, enables precise boundary localisation essential for fragmented dead tree structures. 
+\end{abstract}
+
+\begin{IEEEkeywords}
+    semantic segmentation, cnn, unet, svm, random forests, 
+\end{IEEEkeywords}
+
+\input{01-intro.tex}
+%%what is the problem
+
+%%why is it a problem
+%%how have we solved it
+\input{02-lit.tex}
+\input{03-methods.tex}
+
+\input{04-experimental.tex}
+
+\input{05-disc.tex}
+\input{06-conclusion.tex}
+\input{07-refs.tex}
+
+\bibliographystyle{IEEEtran}
+\input{08-bib.tex}
+
+\end{document}

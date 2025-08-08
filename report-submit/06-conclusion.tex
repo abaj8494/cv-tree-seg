@@ -1,0 +1,13 @@
+\section{Conclusion}
+
+This work demonstrates the superiority of deep encoder-decoder architectures for dead tree segmentation in aerial imagery. Our 8-channel U-Net, leverages multi-spectral inputs (RGB + NRG) with computed vegetation indices (NDVI, NDWI) to achieve an IoU of 0.7078—a 76\% improvement over attention-based alternatives and 146\% over simple CNNs.
+
+Our key findings include: \emph{(i)} spectral feature engineering proves essential, with NDVI/NDWI indices providing another two channels of information on an otherwise small dataset; \emph{(ii)} composite loss functions (Dice + Focal (+ Tversky)) effectively address extreme class imbalance where the traditional BCE proves insufficient; \emph{(iii)} morphological post-processing consistently improves IoU by ~0.04 through noise removal while preserving fragmented tree structures; \emph{(iv)} parameter efficiency analysis reveals that 31M-parameter U-Nets justify their complexity through superior boundary localisation compared to lightweight alternatives.
+
+Classical ML approaches (Random Forest, SGD) fail due to pixel-wise independence assumptions that ignore spatial context. DeepLabV3+ with CBAM, despite sophisticated attention mechanisms, underperforms due to insufficient skip connections for thin structure recovery.
+
+Potential future work could explore:
+\emph{(a)} \textbf{Auto-configuration with nnUNet}. The nnUNet framework automatically tunes patch size, learning rate, and augmentation strategy for each dataset; porting our 8-channel input to nnUNet may squeeze out further boundary-level gains without manual hyper-parameter search.  
+\emph{(b)} \textbf{HoG, LBP}.  Hand-crafted texture descriptors—Histogram of Oriented Gradients (HoG) and Local Binary Patterns (LBP)—encode bark roughness and canopy granularity that spectral indices alone miss. Concatenating HoG/LBP maps with NDVI/NDWI and feeding them to Random Forests or SVMs may restore spatial awareness, thus producing a best of both worlds, with high-accuracy and light-weight inference.
+
+These extensions would not only tighten IoU on dead-tree masks but also enrich the research on multi-class forest-health monitoring and fine-grained vegetation tasks in general.
