@@ -12,7 +12,9 @@ dead-tree segmentation
 
 # implementations
 
-- svm
+- svm (broken)
 - random-forests
+- sgd
 - cnn
+    - cbam
 - unet
